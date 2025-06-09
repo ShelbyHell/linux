@@ -727,14 +727,26 @@ void elevator_set_default(struct request_queue *q)
 	if (q->tag_set->flags & BLK_MQ_F_NO_SCHED_BY_DEFAULT)
 		return;
 
+#if defined(CONFIG_CACHY) && defined(CONFIG_IOSCHED_BFQ)
 	/*
-	 * For single queue devices, default to using mq-deadline. If we
-	 * have multiple queues or mq-deadline is not available, default
-	 * to "none".
+	 * For single queue devices, default to using bfq. If we
+	 * have multiple queues and CONFIG_CACHY is enabled, default to using
+	 * mq-deadline. Otherwise, fallback to "none".
 	 */
+	if (q->nr_hw_queues == 1 || blk_mq_is_shared_tags(q->tag_set->flags))
+		ctx.name = "bfq";
+
+#ifdef CONFIG_MQ_IOSCHED_DEFAULT_ADIOS
+	ctx.name = "adios";
+#endif /* CONFIG_MQ_IOSCHED_DEFAULT_ADIOS */
+
+	if (elevator_find_get(ctx.name))
+		err = elevator_change(q, &ctx);
+#else
 	if (elevator_find_get(ctx.name) && (q->nr_hw_queues == 1 ||
 			 blk_mq_is_shared_tags(q->tag_set->flags)))
 		err = elevator_change(q, &ctx);
+#endif /* CONFIG_CACHY */
 	if (err < 0)
 		pr_warn("\"%s\" elevator initialization, failed %d, "
 			"falling back to \"none\"\n", ctx.name, err);
